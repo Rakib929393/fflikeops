@@ -80,53 +80,25 @@ async def send_request(encrypted_uid, token, url):
         app.logger.error(f"Exception in send_request: {e}")
         return None
 
-# ✅ Updated Like Flood Logic with batch token use
+# Handle Multiple Requests (Like Flood)
 async def send_multiple_requests(uid, server_name, url):
     try:
         region = server_name
         protobuf_message = create_protobuf_message(uid, region)
         if protobuf_message is None:
             return None
-
         encrypted_uid = encrypt_message(protobuf_message)
         if encrypted_uid is None:
             return None
-
+        tasks = []
         tokens = load_tokens(server_name)
-        if tokens is None or not tokens:
-            app.logger.error("No tokens found.")
+        if tokens is None:
             return None
-
-        total_tokens = len(tokens)
-        batch_size = 100
-        usage_per_token = 30
-
-        # Step 1: Process in batches of 100 tokens, 30 rounds
-        for i in range(0, total_tokens, batch_size):
-            current_batch = tokens[i:i + batch_size]
-            token_count = len(current_batch)
-            app.logger.info(f"Processing batch {i//batch_size + 1} with {token_count} tokens")
-
-            for round_num in range(usage_per_token):
-                tasks = []
-                for token_entry in current_batch:
-                    token = token_entry.get("token")
-                    if token:
-                        tasks.append(send_request(encrypted_uid, token, url))
-                if tasks:
-                    await asyncio.gather(*tasks, return_exceptions=True)
-
-        # Step 2: Final round – use all tokens once
-        app.logger.info(f"Sending final round with all {total_tokens} tokens")
-        final_tasks = []
-        for token_entry in tokens:
-            token = token_entry.get("token")
-            if token:
-                final_tasks.append(send_request(encrypted_uid, token, url))
-
-        results = await asyncio.gather(*final_tasks, return_exceptions=True)
+        for i in range(100):
+            token = tokens[i % len(tokens)]["token"]
+            tasks.append(send_request(encrypted_uid, token, url))
+        results = await asyncio.gather(*tasks, return_exceptions=True)
         return results
-
     except Exception as e:
         app.logger.error(f"Exception in send_multiple_requests: {e}")
         return None
